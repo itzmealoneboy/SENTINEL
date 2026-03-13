@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLOCKCHAIN SENTINEL — Identity Attribution System</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cyan: #00f5ff;
+  --pink: #ff006e;
+  --green: #39ff14;
+  --yellow: #ffe600;
+  --purple: #bf00ff;
+  --dim: rgba(0,245,255,0.4);
+  --border: rgba(0,245,255,0.2);
+  --bg: #020408;
+  --panel: rgba(0,8,18,0.96);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--bg);
+  color: var(--cyan);
+  font-family: 'Share Tech Mono', monospace;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* grid bg */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,245,255,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,245,255,.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+canvas { position:fixed; inset:0; z-index:0; }
+.scanlines {
+  position:fixed; inset:0; z-index:1; pointer-events:none;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.04) 2px, rgba(0,0,0,.04) 4px);
+}
+
+/* ── LAYOUT ── */
+#app { position:relative; z-index:2; min-height:100vh; display:flex; flex-direction:column; }
+
+/* ── TOPBAR ── */
+.topbar {
+  display: flex; align-items:center; justify-content:space-between;
+  padding: 0 32px; height: 58px;
+  background: rgba(0,5,12,0.95);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top:0; z-index:50;
+}
+.topbar-logo { font-family:'Orbitron',sans-serif; font-size:13px; font-weight:900; letter-spacing:4px; }
+.topbar-logo span { color: var(--pink); }
+.topbar-right { display:flex; align-items:center; gap:20px; font-size:10px; color:var(--dim); }
+.live-dot { width:7px; height:7px; background:var(--green); border-radius:50%; animation:pulse 1.8s ease-in-out infinite; display:inline-block; margin-right:5px; }
+@keyframes pulse { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(57,255,20,.4);} 50%{opacity:.7;box-shadow:0 0 0 5px rgba(57,255,20,0);} }
+
+/* ── SCREENS ── */
+.screen { display:none; }
+.screen.active { display:block; }
+
+/* ── STEP INDICATOR ── */
+.steps {
+  display:flex; align-items:center; justify-content:center;
+  gap:0; padding:24px 0 0; margin-bottom:32px;
+}
+.step {
+  display:flex; align-items:center; gap:8px;
+  font-size:9px; letter-spacing:2px; color:var(--dim);
+  padding:8px 18px; border:1px solid rgba(0,245,255,.1);
+  transition:all .3s; position:relative;
+}
+.step.active { color:var(--cyan); border-color:var(--cyan); background:rgba(0,245,255,.04); }
+.step.done { color:var(--green); border-color:var(--green); background:rgba(57,255,20,.04); }
+.step-num {
+  width:20px; height:20px; border-radius:50%; border:1px solid currentColor;
+  display:flex; align-items:center; justify-content:center; font-size:9px;
+}
+.step-line { width:32px; height:1px; background:var(--border); }
+.step.done + .step-line { background:var(--green); }
+
+/* ── PANELS ── */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+.panel::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity:.4;
+}
+.panel-hd {
+  padding:16px 22px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.panel-title { font-family:'Orbitron',sans-serif; font-size:10px; letter-spacing:3px; }
+.panel-body { padding:24px 22px; }
+
+/* ── FORM ── */
+.field { margin-bottom:18px; }
+.field label { display:block; font-size:9px; letter-spacing:3px; color:var(--dim); margin-bottom:8px; }
+.field input, .field select, .field textarea {
+  width:100%; background:rgba(0,245,255,.03); border:1px solid var(--border);
+  color:var(--cyan); font-family:'Share Tech Mono',monospace; font-size:13px;
+  padding:12px 14px; outline:none; transition:border-color .2s;
+}
+.field input:focus, .field select:focus, .field textarea:focus { border-color:var(--cyan); }
+.field select option { background:#020408; }
+.field textarea { resize:vertical; min-height:80px; line-height:1.6; }
+.field-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+
+/* ── BUTTONS ── */
+.btn {
+  padding:13px 28px; background:transparent; border:1px solid var(--cyan);
+  color:var(--cyan); font-family:'Orbitron',sans-serif; font-size:10px;
+  letter-spacing:2px; cursor:pointer; transition:all .2s; display:inline-flex;
+  align-items:center; gap:8px;
+}
+.btn:hover { background:rgba(0,245,255,.08); box-shadow:0 0 20px rgba(0,245,255,.15); }
+.btn-pink { border-color:var(--pink); color:var(--pink); }
+.btn-pink:hover { background:rgba(255,0,110,.08); box-shadow:0 0 20px rgba(255,0,110,.15); }
+.btn-green { border-color:var(--green); color:var(--green); }
+.btn-green:hover { background:rgba(57,255,20,.08); }
+.btn-full { width:100%; justify-content:center; }
+
+/* ── BADGES ── */
+.badge {
+  display:inline-block; padding:3px 8px; font-size:9px; letter-spacing:1px;
+  border:1px solid; font-weight:700;
+}
+.badge-telegram  { color:#0088cc; border-color:#0088cc22; background:#0088cc12; }
+.badge-instagram { color:#dc2743; border-color:#dc274322; background:#dc274312; }
+.badge-whatsapp  { color:#25D366; border-color:#25D36622; background:#25D36612; }
+.badge-facebook  { color:#1877f2; border-color:#1877f222; background:#1877f212; }
+.badge-linkedin  { color:#0a66c2; border-color:#0a66c222; background:#0a66c212; }
+.badge-twitter   { color:#1da1f2; border-color:#1da1f222; background:#1da1f212; }
+.badge-tiktok    { color:#ff0050; border-color:#ff005022; background:#ff005012; }
+.badge-youtube   { color:#ff0000; border-color:#ff000022; background:#ff000012; }
+.badge-snapchat  { color:#f5c500; border-color:#f5c50022; background:#f5c50012; }
+
+/* ── MAIN CONTENT WRAPPER ── */
+.main { max-width:900px; margin:0 auto; padding:0 24px 60px; }
+
+/* ── SCREEN 1: SUBMIT REPORT ── */
+#s1 .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+
+/* ── SCREEN 2: SCAN LINKS ── */
+.link-card {
+  border:1px solid; padding:18px 20px; margin-bottom:14px; position:relative;
+  transition: all .25s;
+}
+.link-card:hover { box-shadow: 0 0 30px rgba(0,0,0,.4); }
+.link-card.scammer { border-color:rgba(255,0,110,.35); background:rgba(255,0,110,.03); }
+.link-card.suspect { border-color:rgba(255,230,0,.3); background:rgba(255,230,0,.02); }
+.link-card-label { font-size:9px; letter-spacing:3px; margin-bottom:10px; }
+.link-card.scammer .link-card-label { color:var(--pink); }
+.link-card.suspect .link-card-label { color:var(--yellow); }
+.link-url {
+  font-size:10px; color:rgba(0,245,255,.3); word-break:break-all;
+  padding:10px; background:rgba(0,0,0,.4); border-left:2px solid var(--border);
+  margin:10px 0;
+}
+.btn-row { display:flex; gap:8px; flex-wrap:wrap; }
+
+.scan-status-card {
+  display:flex; align-items:center; gap:14px;
+  padding:14px 16px; border:1px solid var(--border);
+  background:rgba(0,0,0,.3); margin-bottom:10px; transition:all .4s;
+}
+.scan-status-card.active { border-color:var(--cyan); background:rgba(0,245,255,.04); }
+.scan-status-card.done   { border-color:var(--green); background:rgba(57,255,20,.04); }
+.status-icon { font-size:22px; flex-shrink:0; }
+.status-info { flex:1; }
+.status-name { font-size:12px; color:var(--cyan); margin-bottom:3px; }
+.status-sub  { font-size:9px; color:var(--dim); }
+.status-badge { font-size:9px; letter-spacing:1px; padding:4px 10px; border:1px solid; }
+.status-badge.waiting  { color:var(--dim); border-color:var(--border); }
+.status-badge.scanning { color:var(--yellow); border-color:var(--yellow); animation:blink .8s step-end infinite; }
+.status-badge.complete { color:var(--green); border-color:var(--green); }
+@keyframes blink { 50%{opacity:.3;} }
+
+/* ── SCREEN 3: RESULT ── */
+.result-match {
+  text-align:center; padding:40px 30px;
+  border:2px solid var(--pink); background:rgba(255,0,110,.04);
+  margin-bottom:20px; position:relative; overflow:hidden;
+}
+.result-match::before {
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--pink),var(--yellow),var(--pink),transparent);
+  animation:shimmer 2s linear infinite;
+}
+@keyframes shimmer{0%{background-position:-200% 0;}100%{background-position:200% 0;}}
+.result-no-match {
+  text-align:center; padding:40px 30px;
+  border:2px solid var(--green); background:rgba(57,255,20,.04);
+  margin-bottom:20px;
+}
+.result-icon { font-size:56px; margin-bottom:16px; }
+.result-label { font-family:'Orbitron',sans-serif; font-size:20px; font-weight:900; letter-spacing:4px; margin-bottom:8px; }
+.result-sub { font-size:11px; color:var(--dim); line-height:1.7; }
+
+.hash-compare {
+  display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:center;
+  margin:20px 0; padding:16px; background:rgba(0,0,0,.4); border:1px solid var(--border);
+}
+.hash-box { font-size:9px; }
+.hash-label { letter-spacing:2px; margin-bottom:6px; }
+.hash-val { color:rgba(0,245,255,.45); word-break:break-all; line-height:1.6; }
+.hash-connector { text-align:center; font-size:18px; }
+
+.evidence-row { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid rgba(0,245,255,.07); }
+.evidence-key { font-size:10px; color:var(--dim); }
+.evidence-val { font-size:11px; color:var(--cyan); font-family:'Share Tech Mono',monospace; }
+
+/* ── OVERVIEW DASHBOARD ── */
+.stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+.stat-card { text-align:center; padding:20px 12px; border:1px solid var(--border); background:var(--panel); }
+.stat-num { font-family:'Orbitron',sans-serif; font-size:26px; font-weight:900; margin-bottom:4px; }
+.stat-lbl { font-size:8px; letter-spacing:2px; color:var(--dim); }
+
+.reports-table { width:100%; border-collapse:collapse; }
+.reports-table th { padding:10px 14px; text-align:left; font-size:9px; letter-spacing:2px; color:var(--dim); border-bottom:1px solid var(--border); }
+.reports-table td { padding:11px 14px; font-size:11px; border-bottom:1px solid rgba(0,245,255,.05); }
+.reports-table tr { cursor:pointer; transition:background .15s; }
+.reports-table tr:hover td { background:rgba(0,245,255,.03); }
+
+/* ── MODAL ── */
+.modal-bg {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,.88); z-index:300;
+  align-items:center; justify-content:center; padding:20px;
+}
+.modal-bg.open { display:flex; }
+.modal {
+  background:var(--bg); border:1px solid var(--border);
+  width:100%; max-width:620px; max-height:88vh; overflow-y:auto;
+  position:relative; box-shadow:0 0 60px rgba(0,245,255,.08);
+}
+.modal-hd { display:flex; justify-content:space-between; align-items:center; padding:16px 22px; border-bottom:1px solid var(--border); }
+.modal-hd-title { font-family:'Orbitron',sans-serif; font-size:10px; letter-spacing:3px; color:var(--cyan); }
+.modal-close { background:none; border:none; color:var(--dim); font-size:20px; cursor:pointer; line-height:1; }
+.modal-close:hover { color:var(--pink); }
+.modal-body { padding:24px 22px; }
+
+.detail-row { display:flex; padding:10px 0; border-bottom:1px solid rgba(0,245,255,.07); gap:16px; }
+.detail-key { font-size:9px; letter-spacing:2px; color:var(--dim); min-width:130px; padding-top:2px; }
+.detail-val { font-size:12px; flex:1; }
+
+/* ── SCAN ANIMATION ── */
+#scanOverlay {
+  display:none; position:fixed; inset:0; z-index:400;
+  background:rgba(0,0,0,.94); align-items:center; justify-content:center; flex-direction:column;
+}
+#scanOverlay.open { display:flex; }
+.scan-ring {
+  width:100px; height:100px; border-radius:50%; border:2px solid transparent;
+  border-top-color:var(--cyan); border-right-color:rgba(0,245,255,.2);
+  animation:spin 1s linear infinite; margin-bottom:24px;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.scan-label { font-size:11px; letter-spacing:3px; color:var(--cyan); margin-bottom:14px; min-height:18px; text-align:center; }
+.scan-progress { width:240px; height:2px; background:rgba(255,255,255,.06); border-radius:1px; overflow:hidden; }
+.scan-bar { height:100%; background:var(--cyan); width:0%; transition:width .5s; }
+
+/* misc */
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+.fade-in{animation:fadeIn .4s ease forwards;}
+.corner{position:absolute;width:14px;height:14px;border-color:var(--cyan);border-style:solid;opacity:.5;}
+.corner.tl{top:6px;left:6px;border-width:1px 0 0 1px;}
+.corner.tr{top:6px;right:6px;border-width:1px 1px 0 0;}
+.corner.bl{bottom:6px;left:6px;border-width:0 0 1px 1px;}
+.corner.br{bottom:6px;right:6px;border-width:0 1px 1px 0;}
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+<div class="scanlines"></div>
+
+<div id="app">
+
+  <!-- ─── TOPBAR ─── -->
+  <div class="topbar">
+    <div class="topbar-logo">⬡ BLOCKCHAIN <span>SENTINEL</span></div>
+    <div class="topbar-right">
+      <span><span class="live-dot"></span>SYSTEM ONLINE</span>
+      <span id="clock">--:--:--</span>
+      <span style="color:var(--cyan)">BLOCK <span id="blockNum">#18,424,012</span></span>
+    </div>
+  </div>
+
+  <!-- ─── NAV TABS ─── -->
+  <div style="display:flex;gap:0;border-bottom:1px solid var(--border);background:rgba(0,5,12,.9);position:sticky;top:58px;z-index:40;">
+    <button class="nav-tab active" onclick="goTab('overview')" id="tab-overview"
+      style="padding:12px 22px;background:transparent;border:none;border-right:1px solid var(--border);color:var(--cyan);font-family:'Share Tech Mono';font-size:10px;letter-spacing:2px;cursor:pointer;border-bottom:2px solid var(--cyan);">
+      ▣ OVERVIEW
+    </button>
+    <button class="nav-tab" onclick="goTab('submit')" id="tab-submit"
+      style="padding:12px 22px;background:transparent;border:none;border-right:1px solid var(--border);color:var(--dim);font-family:'Share Tech Mono';font-size:10px;letter-spacing:2px;cursor:pointer;border-bottom:2px solid transparent;">
+      + NEW REPORT
+    </button>
+    <button class="nav-tab" onclick="goTab('monitor')" id="tab-monitor"
+      style="padding:12px 22px;background:transparent;border:none;border-right:1px solid var(--border);color:var(--dim);font-family:'Share Tech Mono';font-size:10px;letter-spacing:2px;cursor:pointer;border-bottom:2px solid transparent;">
+      ◎ LIVE SCAN
+    </button>
+    <button class="nav-tab" onclick="goTab('result')" id="tab-result"
+      style="padding:12px 22px;background:transparent;border:none;color:var(--dim);font-family:'Share Tech Mono';font-size:10px;letter-spacing:2px;cursor:pointer;border-bottom:2px solid transparent;">
+      ⬡ RESULTS
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- TAB 1 — OVERVIEW                              -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div id="tab-overview-content" class="main" style="padding-top:28px;">
+
+    <!-- stat cards -->
+    <div class="stat-grid" style="margin-bottom:20px;">
+      <div class="stat-card">
+        <div class="stat-num" style="color:var(--cyan);">20</div>
+        <div class="stat-lbl">TOTAL REPORTS</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" style="color:var(--pink);">7</div>
+        <div class="stat-lbl">CRYPTO SCAMS</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" style="color:var(--green);">5</div>
+        <div class="stat-lbl">MATCHES CONFIRMED</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" style="color:var(--yellow);">30</div>
+        <div class="stat-lbl">HASHES ON CHAIN</div>
+      </div>
+    </div>
+
+    <!-- division bars -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div class="panel">
+        <div class="panel-hd"><div class="panel-title">⬡ SCAM DIVISIONS</div></div>
+        <div class="panel-body" id="divBars"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-hd"><div class="panel-title">⬡ TOP PLATFORMS</div></div>
+        <div class="panel-body" id="platBars"></div>
+      </div>
+    </div>
+
+    <!-- recent reports -->
+    <div class="panel">
+      <div class="panel-hd">
+        <div class="panel-title">⬡ RECENT REPORTS</div>
+        <button onclick="goTab('submit')" class="btn" style="padding:6px 14px;font-size:9px;">+ NEW</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="reports-table" id="recentTable">
+          <thead>
+            <tr>
+              <th>#ID</th><th>SCAM USERNAME</th><th>SUSPECT</th>
+              <th>PLATFORM</th><th>DIVISION</th><th>DATE</th><th>ACTION</th>
+            </tr>
+          </thead>
+          <tbody id="recentBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- TAB 2 — SUBMIT REPORT                         -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div id="tab-submit-content" class="main" style="padding-top:28px;display:none;">
+
+    <!-- step indicator -->
+    <div class="steps">
+      <div class="step active" id="step1"><div class="step-num">1</div>SUBMIT REPORT</div>
+      <div class="step-line"></div>
+      <div class="step" id="step2"><div class="step-num">2</div>SEND LINKS</div>
+      <div class="step-line"></div>
+      <div class="step" id="step3"><div class="step-num">3</div>AWAIT SCAN</div>
+    </div>
+
+    <!-- step 1: form -->
+    <div id="formStep">
+      <div class="panel">
+        <div class="panel-hd">
+          <div class="panel-title">⬡ FILE NEW FRAUD REPORT</div>
+          <span style="font-size:9px;color:var(--dim);">STEP 1 OF 3</span>
+        </div>
+        <div class="panel-body">
+          <div class="field-row">
+            <div class="field">
+              <label>SCAMMER USERNAME *</label>
+              <input id="f_scam" placeholder="e.g. crypto_king_99" type="text">
+            </div>
+            <div class="field">
+              <label>SUSPECT USERNAME</label>
+              <input id="f_suspect" placeholder="e.g. investpro_mike" type="text">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>PLATFORM *</label>
+              <select id="f_platform">
+                <option value="">— SELECT —</option>
+                <option>WhatsApp</option><option>Telegram</option><option>Instagram</option>
+                <option>Facebook</option><option>LinkedIn</option><option>Twitter</option>
+                <option>TikTok</option><option>YouTube</option><option>Snapchat</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>SCAM DIVISION *</label>
+              <select id="f_division">
+                <option value="">— SELECT —</option>
+                <option>Crypto Scam</option><option>Investment Scam</option>
+                <option>Money Scam</option><option>Digital Scam</option><option>Identity Fraud</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>SCAMMER PHONE (for WhatsApp send)</label>
+              <input id="f_scam_phone" placeholder="+60123456789" type="text">
+            </div>
+            <div class="field">
+              <label>SUSPECT PHONE (for WhatsApp send)</label>
+              <input id="f_sus_phone" placeholder="+60198765432" type="text">
+            </div>
+          </div>
+          <div class="field">
+            <label>INCIDENT DESCRIPTION *</label>
+            <textarea id="f_desc" placeholder="Describe the fraud — how it happened, amount lost, evidence..."></textarea>
+          </div>
+          <div id="formErr" style="color:var(--pink);font-size:11px;margin-bottom:14px;display:none;">⚠ Please fill all required fields.</div>
+          <button class="btn btn-full" onclick="submitReport()" style="margin-top:6px;">
+            ⬡ SUBMIT REPORT &amp; GENERATE SCAN LINKS
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- step 2: send links -->
+    <div id="linksStep" style="display:none;" class="fade-in">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+        <div style="padding:16px;border:1px solid var(--green);background:rgba(57,255,20,.04);">
+          <div style="font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:8px;">✓ REPORT FILED</div>
+          <div style="font-family:'Orbitron';font-size:13px;color:var(--cyan);" id="newCaseId">BS-000021</div>
+          <div style="font-size:9px;color:var(--dim);margin-top:4px;">Blockchain hash generated</div>
+        </div>
+        <div style="padding:16px;border:1px solid var(--border);background:rgba(0,0,0,.3);">
+          <div style="font-size:9px;color:var(--dim);letter-spacing:2px;margin-bottom:8px;">SHA-256 IDENTITY HASH</div>
+          <div id="newHash" style="font-size:9px;color:rgba(0,245,255,.35);word-break:break-all;line-height:1.6;"></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-hd"><div class="panel-title">⬡ SEND SCAN LINKS</div></div>
+        <div class="panel-body">
+          <div style="margin-bottom:18px;padding:12px;background:rgba(255,230,0,.04);border:1px solid rgba(255,230,0,.2);">
+            <div style="font-size:9px;color:var(--yellow);letter-spacing:2px;margin-bottom:8px;">⬡ NGROK URL (for remote scanning)</div>
+            <div style="display:flex;gap:8px;">
+              <input id="ngrokUrl" value="http://localhost" placeholder="https://xxxx.ngrok-free.app"
+                style="flex:1;background:rgba(255,230,0,.03);border:1px solid rgba(255,230,0,.25);color:var(--yellow);font-family:'Share Tech Mono';font-size:11px;padding:9px 12px;outline:none;">
+              <button onclick="updateLinks()" style="padding:9px 16px;border:1px solid var(--yellow);color:var(--yellow);background:transparent;font-family:'Orbitron';font-size:9px;cursor:pointer;letter-spacing:1px;">SET</button>
+            </div>
+          </div>
+
+          <!-- scammer card -->
+          <div class="link-card scammer">
+            <div class="corner tl"></div><div class="corner tr"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div class="link-card-label">⬡ SCAMMER — <span id="lk_scam_name">?</span></div>
+              <span id="lk_plat_badge" class="badge">PLATFORM</span>
+            </div>
+            <div class="link-url" id="lk_scam_url">http://localhost/blockchain-sentinel/fake_login_pages/whatsapp/index.php?report=21&role=scammer</div>
+            <div class="btn-row">
+              <a id="lk_scam_wa" href="#" target="_blank" class="btn btn-pink" style="padding:8px 14px;font-size:9px;text-decoration:none;">💬 WHATSAPP SEND</a>
+              <button onclick="copyEl('lk_scam_url')" class="btn" style="padding:8px 14px;font-size:9px;">📋 COPY LINK</button>
+              <button onclick="openFakePage('scammer')" class="btn" style="padding:8px 14px;font-size:9px;">🔗 PREVIEW PAGE</button>
+            </div>
+          </div>
+
+          <!-- suspect card -->
+          <div class="link-card suspect">
+            <div class="corner tl"></div><div class="corner tr"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div class="link-card-label">⬡ SUSPECT — <span id="lk_sus_name">?</span></div>
+            </div>
+            <div class="link-url" id="lk_sus_url">http://localhost/blockchain-sentinel/fake_login_pages/whatsapp/index.php?report=21&role=suspect</div>
+            <div class="btn-row">
+              <a id="lk_sus_wa" href="#" target="_blank" class="btn" style="padding:8px 14px;font-size:9px;text-decoration:none;border-color:var(--yellow);color:var(--yellow);">💬 WHATSAPP SEND</a>
+              <button onclick="copyEl('lk_sus_url')" class="btn" style="padding:8px 14px;font-size:9px;">📋 COPY LINK</button>
+              <button onclick="openFakePage('suspect')" class="btn" style="padding:8px 14px;font-size:9px;">🔗 PREVIEW PAGE</button>
+            </div>
+          </div>
+
+          <button onclick="goTab('monitor');startMonitor()" class="btn btn-pink btn-full" style="margin-top:6px;">
+            ◎ PROCEED TO LIVE SCAN MONITOR →
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- TAB 3 — LIVE SCAN MONITOR                     -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div id="tab-monitor-content" class="main" style="padding-top:28px;display:none;">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+
+      <!-- scammer monitor -->
+      <div class="panel" id="monScamPanel">
+        <div class="panel-hd" style="border-bottom-color:rgba(255,0,110,.2);">
+          <div class="panel-title" style="color:var(--pink);">⬡ SCAMMER DEVICE</div>
+          <span id="monScamStatus" class="status-badge waiting">WAITING</span>
+        </div>
+        <div class="panel-body">
+          <div style="text-align:center;padding:20px 0;" id="monScamIdle">
+            <div style="font-size:36px;margin-bottom:10px;opacity:.3;">📡</div>
+            <div style="font-size:10px;color:var(--dim);">Awaiting scan link access...</div>
+          </div>
+          <div id="monScamData" style="display:none;">
+            <div style="margin-bottom:10px;">
+              <div style="font-size:9px;color:var(--dim);margin-bottom:4px;">SHA-256 FINGERPRINT</div>
+              <div id="monScamHash" style="font-size:9px;color:rgba(0,245,255,.45);word-break:break-all;padding:8px;background:rgba(0,0,0,.4);line-height:1.6;"></div>
+            </div>
+            <div id="monScamMeta" style="font-size:10px;color:var(--dim);line-height:1.8;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- suspect monitor -->
+      <div class="panel" id="monSusPanel">
+        <div class="panel-hd" style="border-bottom-color:rgba(255,230,0,.2);">
+          <div class="panel-title" style="color:var(--yellow);">⬡ SUSPECT DEVICE</div>
+          <span id="monSusStatus" class="status-badge waiting">WAITING</span>
+        </div>
+        <div class="panel-body">
+          <div style="text-align:center;padding:20px 0;" id="monSusIdle">
+            <div style="font-size:36px;margin-bottom:10px;opacity:.3;">📡</div>
+            <div style="font-size:10px;color:var(--dim);">Awaiting scan link access...</div>
+          </div>
+          <div id="monSusData" style="display:none;">
+            <div style="margin-bottom:10px;">
+              <div style="font-size:9px;color:var(--dim);margin-bottom:4px;">SHA-256 FINGERPRINT</div>
+              <div id="monSusHash" style="font-size:9px;color:rgba(255,230,0,.5);word-break:break-all;padding:8px;background:rgba(0,0,0,.4);line-height:1.6;"></div>
+            </div>
+            <div id="monSusMeta" style="font-size:10px;color:var(--dim);line-height:1.8;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- comparison bar -->
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="panel-hd"><div class="panel-title">⬡ REAL-TIME IDENTITY COMPARISON ENGINE</div></div>
+      <div class="panel-body">
+        <div id="compareIdle" style="text-align:center;padding:24px;">
+          <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:14px;">
+            <div style="width:60px;height:60px;border:1px dashed rgba(255,0,110,.3);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;">👤</div>
+            <div style="font-size:18px;color:var(--border);">⟷</div>
+            <div style="width:60px;height:60px;border:1px dashed rgba(255,230,0,.3);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;">👤</div>
+          </div>
+          <div style="font-size:10px;color:var(--dim);letter-spacing:2px;">WAITING FOR BOTH DEVICES TO SCAN</div>
+          <div style="margin-top:16px;display:flex;justify-content:center;">
+            <div id="monProgress" style="width:280px;">
+              <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--dim);margin-bottom:6px;">
+                <span>SCAMMER</span><span id="monProgressPct">0 / 2 scanned</span><span>SUSPECT</span>
+              </div>
+              <div style="height:3px;background:rgba(255,255,255,.05);border-radius:2px;overflow:hidden;">
+                <div id="monProgressBar" style="height:100%;width:0%;background:var(--cyan);transition:width .6s;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="comparingAnim" style="display:none;text-align:center;padding:24px;">
+          <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:14px;">
+            <div style="width:60px;height:60px;border:1px solid var(--pink);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;">👤</div>
+            <div style="font-size:14px;color:var(--cyan);animation:blink .6s step-end infinite;">⟷⟷</div>
+            <div style="width:60px;height:60px;border:1px solid var(--yellow);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;">👤</div>
+          </div>
+          <div style="font-size:11px;color:var(--cyan);letter-spacing:3px;" id="compareStage">COMPARING CANVAS FINGERPRINTS...</div>
+          <div style="margin-top:16px;width:100%;height:3px;background:rgba(255,255,255,.05);overflow:hidden;">
+            <div id="compareBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--cyan),var(--purple));transition:width .5s;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;">
+      <button onclick="simulateScan('scammer')" class="btn btn-pink" style="flex:1;justify-content:center;">
+        ▶ SIMULATE: SCAMMER SCANS
+      </button>
+      <button onclick="simulateScan('suspect')" class="btn" style="flex:1;justify-content:center;border-color:var(--yellow);color:var(--yellow);">
+        ▶ SIMULATE: SUSPECT SCANS
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- TAB 4 — RESULT                                -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div id="tab-result-content" class="main" style="padding-top:28px;display:none;">
+
+    <div id="resultPending" style="text-align:center;padding:60px 20px;">
+      <div style="font-size:48px;margin-bottom:16px;opacity:.3;">⬡</div>
+      <div style="font-size:11px;color:var(--dim);letter-spacing:3px;">NO RESULT YET</div>
+      <div style="font-size:10px;color:rgba(0,245,255,.2);margin-top:8px;">Complete a scan in the LIVE SCAN tab to see results here</div>
+    </div>
+
+    <div id="resultContent" style="display:none;" class="fade-in">
+
+      <div id="resultMatchBox" class="result-match" style="display:none;">
+        <div class="result-icon">⚠</div>
+        <div class="result-label" style="color:var(--pink);">IDENTITY CONFIRMED MATCH</div>
+        <div class="result-sub">Behavioral biometric fingerprints are <strong style="color:var(--pink);">IDENTICAL</strong>.<br>The scammer and suspect are operating from the same device.</div>
+      </div>
+
+      <div id="resultNoMatchBox" class="result-no-match" style="display:none;">
+        <div class="result-icon">✓</div>
+        <div class="result-label" style="color:var(--green);">DIFFERENT IDENTITIES</div>
+        <div class="result-sub">Behavioral fingerprints do <strong style="color:var(--green);">NOT MATCH</strong>.<br>Scammer and suspect are operating from different devices.</div>
+      </div>
+
+      <!-- hash comparison -->
+      <div class="hash-compare">
+        <div class="hash-box">
+          <div class="hash-label" style="color:var(--pink);">⬡ SCAMMER HASH</div>
+          <div class="hash-val" id="res_scam_hash"></div>
+        </div>
+        <div class="hash-connector" id="res_connector">
+          <div style="font-size:20px;" id="res_icon">—</div>
+          <div style="font-size:8px;color:var(--dim);margin-top:4px;" id="res_match_lbl">COMPARING</div>
+        </div>
+        <div class="hash-box" style="text-align:right;">
+          <div class="hash-label" style="color:var(--yellow);">⬡ SUSPECT HASH</div>
+          <div class="hash-val" id="res_sus_hash"></div>
+        </div>
+      </div>
+
+      <!-- evidence table -->
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-hd"><div class="panel-title">⬡ FORENSIC EVIDENCE RECORD</div></div>
+        <div class="panel-body">
+          <div class="evidence-row">
+            <div class="evidence-key">CASE ID</div>
+            <div class="evidence-val" id="ev_case" style="font-family:'Orbitron';color:var(--yellow);"></div>
+          </div>
+          <div class="evidence-row">
+            <div class="evidence-key">SCAMMER USERNAME</div>
+            <div class="evidence-val" id="ev_scam" style="color:var(--pink);"></div>
+          </div>
+          <div class="evidence-row">
+            <div class="evidence-key">SUSPECT USERNAME</div>
+            <div class="evidence-val" id="ev_sus" style="color:var(--yellow);"></div>
+          </div>
+          <div class="evidence-row">
+            <div class="evidence-key">PLATFORM</div>
+            <div class="evidence-val" id="ev_plat"></div>
+          </div>
+          <div class="evidence-row">
+            <div class="evidence-key">BLOCKCHAIN TX</div>
+            <div class="evidence-val" id="ev_tx" style="font-size:9px;color:rgba(0,245,255,.4);word-break:break-all;"></div>
+          </div>
+          <div class="evidence-row" style="border:none;">
+            <div class="evidence-key">MATCH RESULT</div>
+            <div class="evidence-val" id="ev_result"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;">
+        <button onclick="printResult()" class="btn btn-green" style="flex:1;justify-content:center;">📄 PRINT EVIDENCE REPORT</button>
+        <button onclick="goTab('submit');resetForm()" class="btn" style="flex:1;justify-content:center;">+ NEW CASE</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- ── REPORT DETAIL MODAL ── -->
+<div class="modal-bg" id="reportModal">
+  <div class="modal">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <div class="modal-hd">
+      <div class="modal-hd-title" id="modalTitle">⬡ CASE FILE</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- ── SCAN ANIMATION OVERLAY ── -->
+<div id="scanOverlay">
+  <div class="scan-ring"></div>
+  <div class="scan-label" id="scanLabel">INITIALIZING...</div>
+  <div class="scan-progress"><div class="scan-bar" id="scanBar"></div></div>
+  <div style="margin-top:14px;font-size:9px;color:rgba(0,245,255,.25);letter-spacing:2px;" id="scanSub">BLOCKCHAIN SENTINEL FORENSIC ENGINE</div>
+</div>
+
+<!-- ── FAKE LOGIN PAGE MODAL ── -->
+<div class="modal-bg" id="fakePageModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-hd">
+      <div class="modal-hd-title" id="fpModalTitle">⬡ FAKE LOGIN PAGE PREVIEW</div>
+      <button class="modal-close" onclick="document.getElementById('fakePageModal').classList.remove('open')">✕</button>
+    </div>
+    <div id="fpModalBody" style="padding:0;overflow:hidden;"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// BACKGROUND ANIMATION — 3D orbit rings
+// ═══════════════════════════════════════════════════════
+(function(){
+  const cv = document.getElementById('bgCanvas');
+  const ctx = cv.getContext('2d');
+  let W,H,CX,CY;
+  function resize(){W=cv.width=window.innerWidth;H=cv.height=window.innerHeight;CX=W/2;CY=H/2;}
+  resize(); window.addEventListener('resize',resize);
+
+  const rings = [
+    {a:0.4,b:0.12,tilt:0.3,speed:0.0004,color:'rgba(0,245,255,',phase:0,chars:'01'},
+    {a:0.35,b:0.1,tilt:-0.4,speed:-0.0006,color:'rgba(191,0,255,',phase:Math.PI/3,chars:'01▣⬡'},
+    {a:0.28,b:0.08,tilt:0.6,speed:0.0007,color:'rgba(57,255,20,',phase:Math.PI},
+    {a:0.22,b:0.06,tilt:-0.2,speed:-0.0005,color:'rgba(255,230,0,',phase:Math.PI*1.5,chars:'⬡01'},
+  ];
+  const NPTS = 28;
+  let t = 0;
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    const sc = Math.min(W,H);
+    t += 1;
+    rings.forEach(ring=>{
+      ring.phase += ring.speed;
+      const pts = [];
+      for(let i=0;i<NPTS;i++){
+        const angle = (i/NPTS)*Math.PI*2 + ring.phase;
+        const x0 = Math.cos(angle)*ring.a*sc;
+        const y0 = Math.sin(angle)*ring.b*sc;
+        const y1 = y0*Math.cos(ring.tilt) - 0;
+        const z  = y0*Math.sin(ring.tilt);
+        const depth = (z/(ring.b*sc)+1)/2;
+        pts.push({x:CX+x0,y:CY+y1,depth,angle});
+      }
+      pts.sort((a,b)=>a.depth-b.depth);
+      pts.forEach(p=>{
+        const alpha = 0.08 + p.depth*0.35;
+        const sz = 7 + p.depth*5;
+        ctx.font = `${sz}px Share Tech Mono`;
+        ctx.fillStyle = ring.color+alpha+')';
+        ctx.fillText('0', p.x, p.y);
+      });
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ═══════════════════════════════════════════════════════
+// DEMO DATA
+// ═══════════════════════════════════════════════════════
+const demoReports = [
+  {id:1,scam_username:'crypto_king_99',suspect_username:'investpro_mike',platform:'Telegram',division:'Crypto Scam',description:'Promised 500% returns on crypto investment. Disappeared after receiving 2 BTC.',fingerprint_hash:'a3f8e2d1c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0',blockchain_tx:'0xabc123def456789',created_at:'2025-01-15 09:23:11'},
+  {id:2,scam_username:'forex_master_777',suspect_username:'richtrader_alex',platform:'Instagram',division:'Investment Scam',description:'Fake forex trading signals. Collected $5000 from 12 victims before disappearing.',fingerprint_hash:'b4e9f3a2d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1',blockchain_tx:'0xdef789abc123456',created_at:'2025-01-14 14:05:30'},
+  {id:3,scam_username:'nft_drop_official',suspect_username:'digital_art_pro',platform:'Twitter',division:'Digital Scam',description:'Fake NFT drops. Victims paid ETH for non-existent digital art collections.',fingerprint_hash:'c5f0a4b3e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2',blockchain_tx:'0x789456def123abc',created_at:'2025-01-13 18:45:00'},
+  {id:4,scam_username:'loan_helper_fast',suspect_username:'quickcash_lender',platform:'WhatsApp',division:'Money Scam',description:'Advance fee fraud. Promised instant loans, charged upfront fees then vanished.',fingerprint_hash:'d6a1b5c4f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3',blockchain_tx:'0x321def789abc456',created_at:'2025-01-13 10:22:05'},
+  {id:5,scam_username:'job_recruiter_intl',suspect_username:'hr_manager_sarah',platform:'LinkedIn',division:'Identity Fraud',description:'Fake job offers to steal personal information including passport and bank details.',fingerprint_hash:'e7b2c6d5a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4',blockchain_tx:'0x654abc321def789',created_at:'2025-01-12 09:00:00'},
+  {id:6,scam_username:'bitcoin_doubler_x',suspect_username:null,platform:'Telegram',division:'Crypto Scam',description:'Bitcoin doubling scheme. Collected over 5 BTC from multiple victims.',fingerprint_hash:'f8c3d7e6b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5',blockchain_tx:'0x987xyz654uvw321',created_at:'2025-01-12 07:30:45'},
+  {id:7,scam_username:'romance_scammer_90',suspect_username:'sweetheart_anna',platform:'Instagram',division:'Money Scam',description:'Romance scam. Built relationship over 3 months then requested $10,000 for emergency.',fingerprint_hash:'a9d4e8f7c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6',blockchain_tx:'0xabc987xyz654uvw',created_at:'2025-01-11 16:10:22'},
+  {id:8,scam_username:'tech_support_ms',suspect_username:'microsoft_helper',platform:'Facebook',division:'Digital Scam',description:'Fake Microsoft tech support. Gained remote access to steal banking credentials.',fingerprint_hash:'b0e5f9a8d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7',blockchain_tx:'0xdef456abc789xyz',created_at:'2025-01-11 12:00:00'},
+];
+
+const platColors = {WhatsApp:'#25D366',Telegram:'#0088cc',Instagram:'#dc2743',LinkedIn:'#0a66c2',Twitter:'#1da1f2',Facebook:'#1877f2',TikTok:'#ff0050',YouTube:'#ff0000',Snapchat:'#f5c500'};
+const divColors  = {'Crypto Scam':'#ff006e','Investment Scam':'#ff6b00','Money Scam':'#ffe600','Digital Scam':'#00f5ff','Identity Fraud':'#bf00ff'};
+
+// ═══════════════════════════════════════════════════════
+// CLOCK + BLOCK
+// ═══════════════════════════════════════════════════════
+function tick(){
+  const n=new Date();
+  document.getElementById('clock').textContent=n.toTimeString().substr(0,8);
+}
+setInterval(tick,1000); tick();
+
+let block=18424012;
+setInterval(()=>{block+=Math.floor(Math.random()*3);document.getElementById('blockNum').textContent='#'+block.toLocaleString();},4000);
+
+// ═══════════════════════════════════════════════════════
+// NAV TABS
+// ═══════════════════════════════════════════════════════
+const TABS = ['overview','submit','monitor','result'];
+function goTab(name){
+  TABS.forEach(t=>{
+    const btn = document.getElementById('tab-'+t);
+    const cnt = document.getElementById('tab-'+t+'-content');
+    const isActive = t===name;
+    if(btn){ btn.style.color=isActive?'var(--cyan)':'var(--dim)'; btn.style.borderBottom=isActive?'2px solid var(--cyan)':'2px solid transparent'; }
+    if(cnt) cnt.style.display=isActive?'block':'none';
+  });
+  if(name==='overview') buildOverview();
+}
+
+// ═══════════════════════════════════════════════════════
+// OVERVIEW
+// ═══════════════════════════════════════════════════════
+function buildOverview(){
+  // division bars
+  const divCounts={};
+  demoReports.forEach(r=>{divCounts[r.division]=(divCounts[r.division]||0)+1;});
+  const divMax = Math.max(...Object.values(divCounts));
+  document.getElementById('divBars').innerHTML = Object.entries(divCounts).map(([d,c])=>`
+    <div style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:5px;">
+        <span style="color:var(--dim);">${d}</span>
+        <span style="color:${divColors[d]||'var(--cyan)'};font-family:Orbitron;">${c}</span>
+      </div>
+      <div style="height:5px;background:rgba(255,255,255,.05);border-radius:2px;overflow:hidden;">
+        <div style="height:100%;width:${(c/divMax*100)}%;background:${divColors[d]||'var(--cyan)'};border-radius:2px;transition:width 1s;"></div>
+      </div>
+    </div>`).join('');
+
+  // platform bars
+  const platCounts={};
+  demoReports.forEach(r=>{platCounts[r.platform]=(platCounts[r.platform]||0)+1;});
+  const platMax = Math.max(...Object.values(platCounts));
+  document.getElementById('platBars').innerHTML = Object.entries(platCounts).map(([p,c])=>`
+    <div style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:5px;">
+        <span style="color:var(--dim);">${p}</span>
+        <span style="color:${platColors[p]||'var(--cyan)'};font-family:Orbitron;">${c}</span>
+      </div>
+      <div style="height:5px;background:rgba(255,255,255,.05);border-radius:2px;overflow:hidden;">
+        <div style="height:100%;width:${(c/platMax*100)}%;background:${platColors[p]||'var(--cyan)'};border-radius:2px;"></div>
+      </div>
+    </div>`).join('');
+
+  // recent table
+  document.getElementById('recentBody').innerHTML = demoReports.slice(0,8).map(r=>`
+    <tr onclick="openModal(${r.id})">
+      <td style="color:var(--dim);font-size:10px;">#${r.id}</td>
+      <td style="color:var(--pink);">${r.scam_username}</td>
+      <td style="color:${r.suspect_username?'var(--yellow)':'rgba(0,245,255,.2)'};">${r.suspect_username||'—'}</td>
+      <td><span class="badge badge-${r.platform.toLowerCase()}">${r.platform}</span></td>
+      <td style="font-size:10px;color:${divColors[r.division]||'var(--cyan)'};">${r.division}</td>
+      <td style="color:var(--dim);font-size:10px;">${r.created_at.substr(0,10)}</td>
+      <td><button onclick="event.stopPropagation();openModal(${r.id})" style="padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--cyan);font-size:9px;cursor:pointer;font-family:'Share Tech Mono';">VIEW</button></td>
+    </tr>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// REPORT MODAL
+// ═══════════════════════════════════════════════════════
+function openModal(id){
+  const r = demoReports.find(x=>x.id==id);
+  if(!r) return;
+  document.getElementById('modalTitle').textContent = `⬡ CASE FILE // BS-${String(r.id).padStart(6,'0')}`;
+  document.getElementById('modalBody').innerHTML = `
+    <div class="detail-row"><div class="detail-key">CASE ID</div><div class="detail-val" style="font-family:'Orbitron';color:var(--yellow);">BS-${String(r.id).padStart(6,'0')}</div></div>
+    <div class="detail-row"><div class="detail-key">SCAM USERNAME</div><div class="detail-val" style="color:var(--pink);">${r.scam_username}</div></div>
+    <div class="detail-row"><div class="detail-key">SUSPECT</div><div class="detail-val" style="color:${r.suspect_username?'var(--yellow)':'rgba(0,245,255,.3)'};">${r.suspect_username||'NOT PROVIDED'}</div></div>
+    <div class="detail-row"><div class="detail-key">PLATFORM</div><div class="detail-val"><span class="badge badge-${r.platform.toLowerCase()}">${r.platform}</span></div></div>
+    <div class="detail-row"><div class="detail-key">DIVISION</div><div class="detail-val" style="color:${divColors[r.division]||'var(--cyan)'};">${r.division}</div></div>
+    <div class="detail-row"><div class="detail-key">DESCRIPTION</div><div class="detail-val" style="font-size:11px;line-height:1.7;color:rgba(0,245,255,.7);">${r.description}</div></div>
+    <div class="detail-row"><div class="detail-key">DATE</div><div class="detail-val" style="color:var(--dim);">${r.created_at}</div></div>
+    <div class="detail-row" style="border:none;"><div class="detail-key">BLOCKCHAIN TX</div><div class="detail-val" style="font-size:9px;color:rgba(0,245,255,.35);word-break:break-all;">${r.blockchain_tx}</div></div>
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button onclick="loadCaseIntoMonitor(${r.id})" class="btn btn-pink" style="flex:1;justify-content:center;padding:11px;">◎ OPEN IN LIVE SCAN</button>
+      <button onclick="closeModal()" class="btn" style="padding:11px 18px;">CLOSE</button>
+    </div>`;
+  document.getElementById('reportModal').classList.add('open');
+}
+function closeModal(){ document.getElementById('reportModal').classList.remove('open'); }
+document.getElementById('reportModal').addEventListener('click',e=>{ if(e.target===document.getElementById('reportModal')) closeModal(); });
+
+// ═══════════════════════════════════════════════════════
+// SUBMIT REPORT
+// ═══════════════════════════════════════════════════════
+let currentReport = null;
+let scamHash = null;
+let susHash  = null;
+let scamScanned = false;
+let susScanned  = false;
+
+function sha256sim(str){
+  // deterministic-looking fake hash from string
+  let h = 0;
+  for(let i=0;i<str.length;i++) h = (Math.imul(31,h)+str.charCodeAt(i))|0;
+  const seed = Math.abs(h);
+  let out = '';
+  const chars='0123456789abcdef';
+  let s = seed;
+  for(let i=0;i<64;i++){s=(s*1664525+1013904223)>>>0; out+=chars[s%16];}
+  return out;
+}
+
+function submitReport(){
+  const scam   = document.getElementById('f_scam').value.trim();
+  const plat   = document.getElementById('f_platform').value;
+  const div    = document.getElementById('f_division').value;
+  const desc   = document.getElementById('f_desc').value.trim();
+  const err    = document.getElementById('formErr');
+  if(!scam||!plat||!div||!desc){ err.style.display='block'; return; }
+  err.style.display='none';
+
+  const sus      = document.getElementById('f_suspect').value.trim();
+  const scamPh   = document.getElementById('f_scam_phone').value.trim();
+  const susPh    = document.getElementById('f_sus_phone').value.trim();
+  const id       = demoReports.length+1;
+  const hash     = sha256sim(scam+plat+div+Date.now());
+  const tx       = '0x'+sha256sim(hash).substr(0,16);
+  const caseId   = 'BS-'+String(id).padStart(6,'0');
+
+  currentReport = {id,scam_username:scam,suspect_username:sus||null,platform:plat,division:div,description:desc,fingerprint_hash:hash,blockchain_tx:tx,scam_phone:scamPh,suspect_phone:susPh,created_at:new Date().toISOString().replace('T',' ').substr(0,19)};
+  demoReports.unshift(currentReport);
+
+  // show scan anim
+  runScanAnim(()=>{
+    document.getElementById('formStep').style.display='none';
+    document.getElementById('linksStep').style.display='block';
+    document.getElementById('newCaseId').textContent=caseId;
+    document.getElementById('newHash').textContent=hash;
+    updateLinks();
+    setStep(2);
+  });
+}
+
+function updateLinks(){
+  if(!currentReport) return;
+  const base = (document.getElementById('ngrokUrl').value||'http://localhost').replace(/\/+$/,'');
+  const page = currentReport.platform.toLowerCase();
+  const scamUrl = `${base}/blockchain-sentinel/fake_login_pages/${page}/index.php?report=${currentReport.id}&role=scammer`;
+  const susUrl  = `${base}/blockchain-sentinel/fake_login_pages/${page}/index.php?report=${currentReport.id}&role=suspect`;
+
+  document.getElementById('lk_scam_name').textContent = currentReport.scam_username;
+  document.getElementById('lk_sus_name').textContent  = currentReport.suspect_username||'(not set)';
+  document.getElementById('lk_scam_url').textContent  = scamUrl;
+  document.getElementById('lk_sus_url').textContent   = susUrl;
+  document.getElementById('lk_plat_badge').textContent= currentReport.platform.toUpperCase();
+  document.getElementById('lk_plat_badge').className  = `badge badge-${currentReport.platform.toLowerCase()}`;
+
+  const msg = (role)=>`⚠ *Security Alert — Verification Required*\n\nYour ${currentReport.platform} account has been flagged. Verify identity immediately:\n\n${role==='scammer'?scamUrl:susUrl}\n\nExpires in 24 hours.`;
+  const scamPh = currentReport.scam_phone;
+  const susPh  = currentReport.suspect_phone;
+  document.getElementById('lk_scam_wa').href = scamPh ? `https://wa.me/${scamPh.replace(/\D/g,'')}?text=${encodeURIComponent(msg('scammer'))}` : '#';
+  document.getElementById('lk_sus_wa').href  = susPh  ? `https://wa.me/${susPh.replace(/\D/g,'')}?text=${encodeURIComponent(msg('suspect'))}` : '#';
+}
+
+function openFakePage(role){
+  if(!currentReport) return;
+  const plat = currentReport.platform.toLowerCase();
+  const platUI = {
+    whatsapp:  {bg:'#f0f2f5',accent:'#25D366',logo:'💬',name:'WhatsApp',fields:['Your WhatsApp Number','WhatsApp PIN']},
+    telegram:  {bg:'#f1f1f1',accent:'#0088cc',logo:'✈️',name:'Telegram',fields:['Phone Number or Username','Password']},
+    instagram: {bg:'#fafafa',accent:'#dc2743',logo:'📷',name:'Instagram',fields:['Username, email, or phone','Password']},
+    facebook:  {bg:'#f0f2f5',accent:'#1877f2',logo:'👤',name:'Facebook',fields:['Email or phone number','Password']},
+    linkedin:  {bg:'#f3f2ef',accent:'#0a66c2',logo:'💼',name:'LinkedIn',fields:['Email or Phone','Password']},
+    twitter:   {bg:'#000',accent:'#1da1f2',logo:'𝕏',name:'Twitter / X',fields:['Phone, email, or username','Password']},
+    tiktok:    {bg:'#fff',accent:'#ff0050',logo:'🎵',name:'TikTok',fields:['Phone / email / username','Password']},
+    youtube:   {bg:'#fff',accent:'#ff0000',logo:'▶️',name:'YouTube',fields:['Email or phone','Password']},
+    snapchat:  {bg:'#fffc00',accent:'#000',logo:'👻',name:'Snapchat',fields:['Username','Password']},
+  };
+  const ui = platUI[plat]||platUI.whatsapp;
+  const isDark = plat==='twitter';
+  const tc = isDark?'#fff':'#222';
+
+  document.getElementById('fpModalTitle').textContent = `⬡ FAKE ${ui.name.toUpperCase()} PAGE // ${role.toUpperCase()}`;
+  document.getElementById('fpModalBody').innerHTML = `
+    <div style="background:${ui.bg};padding:32px 28px;font-family:-apple-system,sans-serif;">
+      <div style="text-align:center;margin-bottom:20px;">
+        <div style="font-size:44px;margin-bottom:8px;">${ui.logo}</div>
+        <div style="font-size:18px;font-weight:700;color:${tc};">${ui.name}</div>
+      </div>
+      <div style="background:${isDark?'#1a1a1a':'#fff3cd'};border:1px solid ${isDark?'#f4212e':'#ffc107'};border-radius:6px;padding:11px;margin-bottom:18px;font-size:12px;color:${isDark?'#f4212e':'#856404'};">
+        ⚠ <strong>Security Alert:</strong> Unusual activity detected on your account. Please verify your identity.
+      </div>
+      ${ui.fields.map(f=>`
+        <div style="margin-bottom:12px;">
+          <input placeholder="${f}" style="width:100%;padding:12px 14px;border:1.5px solid ${isDark?'#333':'#ddd'};border-radius:6px;font-size:14px;outline:none;background:${isDark?'#000':ui.bg};color:${tc};">
+        </div>`).join('')}
+      <button style="width:100%;padding:13px;background:${ui.accent};color:${plat==='snapchat'?'#000':'white'};border:none;border-radius:6px;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px;">
+        Verify Account
+      </button>
+      <div style="text-align:center;margin-top:12px;font-size:11px;color:#888;">🔒 Secured by ${ui.name}</div>
+      <div style="text-align:center;margin-top:8px;padding:8px;background:rgba(0,0,0,.06);border-radius:4px;font-size:10px;color:#aaa;">
+        [ Fingerprint collection runs silently on submit ]
+      </div>
+    </div>`;
+  document.getElementById('fakePageModal').classList.add('open');
+}
+document.getElementById('fakePageModal').addEventListener('click',e=>{ if(e.target===document.getElementById('fakePageModal')) document.getElementById('fakePageModal').classList.remove('open'); });
+
+// ═══════════════════════════════════════════════════════
+// LIVE SCAN MONITOR
+// ═══════════════════════════════════════════════════════
+function startMonitor(){
+  scamScanned=false; susScanned=false; scamHash=null; susHash=null;
+  resetMonitorUI();
+  setStep(3);
+}
+
+function loadCaseIntoMonitor(id){
+  closeModal();
+  const r = demoReports.find(x=>x.id==id);
+  if(r) currentReport=r;
+  goTab('monitor');
+  startMonitor();
+}
+
+function resetMonitorUI(){
+  ['Scam','Sus'].forEach(k=>{
+    document.getElementById('mon'+k+'Idle').style.display='block';
+    document.getElementById('mon'+k+'Data').style.display='none';
+    document.getElementById('mon'+k+'Status').className='status-badge waiting';
+    document.getElementById('mon'+k+'Status').textContent='WAITING';
+    const panel=document.getElementById('mon'+k+'Panel');
+    panel.style.borderColor='var(--border)';
+  });
+  document.getElementById('compareIdle').style.display='block';
+  document.getElementById('comparingAnim').style.display='none';
+  document.getElementById('monProgressBar').style.width='0%';
+  document.getElementById('monProgressPct').textContent='0 / 2 scanned';
+}
+
+function simulateScan(role){
+  const isScam = role==='scammer';
+  const key    = isScam?'Scam':'Sus';
+  const hash   = sha256sim((currentReport?(isScam?currentReport.scam_username:currentReport.suspect_username):role)+Date.now()+Math.random());
+
+  document.getElementById('mon'+key+'Status').className='status-badge scanning';
+  document.getElementById('mon'+key+'Status').textContent='SCANNING...';
+
+  const stages=['READING DEVICE...','CANVAS FINGERPRINT...','WEBGL HASH...','BROWSER SIGNATURE...','GENERATING SHA-256...'];
+  let si=0;
+  const iv=setInterval(()=>{
+    si++;
+    if(si>=stages.length){
+      clearInterval(iv);
+      if(isScam){ scamScanned=true; scamHash=hash; }
+      else { susScanned=true; susHash=hash; }
+
+      document.getElementById('mon'+key+'Idle').style.display='none';
+      document.getElementById('mon'+key+'Data').style.display='block';
+      document.getElementById('mon'+key+'Status').className='status-badge complete';
+      document.getElementById('mon'+key+'Status').textContent='COMPLETE';
+      document.getElementById('mon'+key+'Panel').style.borderColor=isScam?'rgba(255,0,110,.4)':'rgba(255,230,0,.4)';
+
+      const name = currentReport?(isScam?currentReport.scam_username:currentReport.suspect_username):role;
+      document.getElementById('mon'+key+'Hash').textContent=hash;
+      document.getElementById('mon'+key+'Meta').innerHTML=
+        `Device: ${navigator.userAgent.substr(0,50)}...<br>Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}<br>Screen: ${screen.width}×${screen.height}<br>Language: ${navigator.language}`;
+
+      const scanned = (scamScanned?1:0)+(susScanned?1:0);
+      document.getElementById('monProgressBar').style.width=(scanned/2*100)+'%';
+      document.getElementById('monProgressPct').textContent=scanned+' / 2 scanned';
+
+      if(scamScanned && susScanned) setTimeout(runComparison, 500);
+    }
+  },380);
+}
+
+function runComparison(){
+  document.getElementById('compareIdle').style.display='none';
+  document.getElementById('comparingAnim').style.display='block';
+
+  const stages2=['COMPARING CANVAS FINGERPRINTS...','CHECKING WEBGL SIGNATURES...','ANALYZING BROWSER ENTROPY...','CROSS-REFERENCING BLOCKCHAIN HASHES...','COMPUTING SIMILARITY SCORE...','FINALIZING VERDICT...'];
+  let i=0;
+  const lbl=document.getElementById('compareStage');
+  const bar=document.getElementById('compareBar');
+  const iv=setInterval(()=>{
+    lbl.textContent=stages2[i]||stages2[stages2.length-1];
+    bar.style.width=((i+1)/stages2.length*100)+'%';
+    i++;
+    if(i>=stages2.length){
+      clearInterval(iv);
+      setTimeout(()=>showResult(), 600);
+    }
+  },480);
+}
+
+function showResult(){
+  // In demo: if report has both scammer+suspect → MATCH (simulated)
+  const isMatch = currentReport && currentReport.suspect_username && (Math.random()>0.4);
+  const caseId  = currentReport?'BS-'+String(currentReport.id).padStart(6,'0'):'BS-000001';
+
+  document.getElementById('resultPending').style.display='none';
+  document.getElementById('resultContent').style.display='block';
+  document.getElementById('resultMatchBox').style.display   = isMatch?'block':'none';
+  document.getElementById('resultNoMatchBox').style.display = isMatch?'none':'block';
+
+  document.getElementById('res_scam_hash').textContent = scamHash||'a3f8e2d1c7b6a5f4...';
+  document.getElementById('res_sus_hash').textContent  = isMatch?(scamHash||'a3f8e2d1c7b6a5f4...'):(susHash||'b4e9f3a2d8c7b6a5...');
+  document.getElementById('res_icon').textContent      = isMatch?'⚠':'✓';
+  document.getElementById('res_match_lbl').textContent = isMatch?'IDENTICAL HASH':'DIFFERENT HASH';
+  document.getElementById('res_icon').style.color      = isMatch?'var(--pink)':'var(--green)';
+
+  if(currentReport){
+    document.getElementById('ev_case').textContent = caseId;
+    document.getElementById('ev_scam').textContent = currentReport.scam_username;
+    document.getElementById('ev_sus').textContent  = currentReport.suspect_username||'Not provided';
+    document.getElementById('ev_plat').innerHTML   = `<span class="badge badge-${currentReport.platform.toLowerCase()}">${currentReport.platform}</span>`;
+    document.getElementById('ev_tx').textContent   = currentReport.blockchain_tx;
+  }
+  document.getElementById('ev_result').innerHTML = isMatch
+    ? `<span style="color:var(--pink);font-family:Orbitron;letter-spacing:1px;">⚠ CONFIRMED MATCH</span>`
+    : `<span style="color:var(--green);font-family:Orbitron;letter-spacing:1px;">✓ NO MATCH — DIFFERENT DEVICES</span>`;
+
+  // highlight result tab
+  const btn=document.getElementById('tab-result');
+  btn.style.color='var(--yellow)'; btn.style.borderBottom='2px solid var(--yellow)';
+  setTimeout(()=>goTab('result'), 900);
+}
+
+// ═══════════════════════════════════════════════════════
+// SCAN ANIMATION
+// ═══════════════════════════════════════════════════════
+function runScanAnim(cb){
+  const ov=document.getElementById('scanOverlay');
+  const lbl=document.getElementById('scanLabel');
+  const bar=document.getElementById('scanBar');
+  ov.classList.add('open');
+  const stages=['INITIALIZING FORENSIC ENGINE...','GENERATING BEHAVIORAL HASH...','SIGNING TO BLOCKCHAIN...','STORING IDENTITY RECORD...','COMPLETE ✓'];
+  let i=0;
+  const iv=setInterval(()=>{
+    lbl.textContent=stages[i]||stages[stages.length-1];
+    bar.style.width=((i+1)/stages.length*100)+'%';
+    i++;
+    if(i>=stages.length){ clearInterval(iv); setTimeout(()=>{ ov.classList.remove('open'); bar.style.width='0%'; cb(); },400); }
+  },520);
+}
+
+// ═══════════════════════════════════════════════════════
+// STEP INDICATOR
+// ═══════════════════════════════════════════════════════
+function setStep(n){
+  for(let i=1;i<=3;i++){
+    const el=document.getElementById('step'+i);
+    if(!el) continue;
+    el.className='step'+(i<n?' done':i===n?' active':'');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════
+function copyEl(id){
+  const txt=document.getElementById(id).textContent;
+  navigator.clipboard.writeText(txt).then(()=>{
+    const el=document.getElementById(id);
+    const orig=el.style.color;
+    el.style.color='var(--green)';
+    setTimeout(()=>el.style.color=orig,1400);
+  }).catch(()=>alert('Copied:\n'+txt));
+}
+
+function resetForm(){
+  ['f_scam','f_suspect','f_scam_phone','f_sus_phone','f_desc'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['f_platform','f_division'].forEach(id=>{const el=document.getElementById(id);if(el)el.selectedIndex=0;});
+  document.getElementById('formStep').style.display='block';
+  document.getElementById('linksStep').style.display='none';
+  setStep(1);
+}
+
+function printResult(){
+  const r=currentReport;
+  const w=window.open('','_blank','width=760,height=600');
+  w.document.write(`<!DOCTYPE html><html><head><title>Evidence Report</title>
+  <style>body{font-family:monospace;padding:30px;color:#111;}h1{font-size:18px;border-bottom:2px solid #00a0b0;padding-bottom:10px;margin-bottom:20px;}table{width:100%;border-collapse:collapse;}td{padding:9px 12px;border-bottom:1px solid #eee;font-size:13px;}td:first-child{color:#666;width:38%;font-weight:600;}.footer{margin-top:30px;border-top:1px solid #ddd;padding-top:12px;font-size:11px;color:#999;display:flex;justify-content:space-between;}</style>
+  </head><body>
+  <h1>⬡ BLOCKCHAIN SENTINEL — FORENSIC EVIDENCE REPORT</h1>
+  <table>
+  <tr><td>Case ID</td><td>${r?'BS-'+String(r.id).padStart(6,'0'):'—'}</td></tr>
+  <tr><td>Scammer</td><td>${r?.scam_username||'—'}</td></tr>
+  <tr><td>Suspect</td><td>${r?.suspect_username||'Not Identified'}</td></tr>
+  <tr><td>Platform</td><td>${r?.platform||'—'}</td></tr>
+  <tr><td>Division</td><td>${r?.division||'—'}</td></tr>
+  <tr><td>Scammer Hash</td><td style="font-size:11px;word-break:break-all;">${scamHash||'—'}</td></tr>
+  <tr><td>Suspect Hash</td><td style="font-size:11px;word-break:break-all;">${susHash||'—'}</td></tr>
+  <tr><td>Blockchain TX</td><td style="font-size:11px;">${r?.blockchain_tx||'—'}</td></tr>
+  <tr><td>Generated</td><td>${new Date().toLocaleString()}</td></tr>
+  </table>
+  <div class="footer"><span>BLOCKCHAIN SENTINEL // FORENSIC DIVISION</span><span>CONFIDENTIAL</span></div>
+  </body></html>`);
+  w.document.close(); setTimeout(()=>w.print(),500);
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+buildOverview();
+</script>
+</body>
+</html>
